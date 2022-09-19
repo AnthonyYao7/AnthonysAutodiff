@@ -209,9 +209,10 @@ class Variable:
             return 2 * d_du * self.a.value
         elif self.op == Operation.M_MUL:
             if a_or_b == 0:
-                pass
+                diag_d_du = np.diag(d_du)
+                return np.matmul(diag_d_du, np.tile(self.b.value, (self.a.value.shape[0], 1)))
             else:
-                pass
+                return np.dot(d_du, self.a.value.T[0])
         elif self.op == Operation.M_RDS:
             return d_du * np.ones_like(self.a.value)
         elif self.op == Operation.M_TNP:
