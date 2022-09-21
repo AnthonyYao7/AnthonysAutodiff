@@ -1,5 +1,6 @@
 import numpy as np
 from enum import IntEnum
+import matplotlib.pyplot as plt
 from utils import print_tree
 
 global_variable_counter = 0
@@ -168,45 +169,49 @@ class Variable:
             print("something has gone horribly wrong")
         return self.value
 
-    def differentiate(self, d_du):
+    def differentiate(self):
         if self.op is None:
             return None
         elif self.op == Operation.S_ADD:
-            self.a.grad = d_du * np.float32(1.)
-            self.b.grad = d_du * np.float32(1.)
+            self.a.grad = self.grad * np.float32(1.)
+            self.b.grad = self.grad * np.float32(1.)
         elif self.op == Operation.S_SUB:
-            self.a.grad = d_du * np.float32(1.)
-            self.b.grad = d_du * np.float32(-1.)
+            self.a.grad = self.grad * np.float32(1.)
+            self.b.grad = self.grad * np.float32(-1.)
         elif self.op == Operation.S_MUL:
-            self.a.grad = d_du * self.b.value
-            self.b.grad = d_du * self.a.value
+            self.a.grad = self.grad * self.b.value
+            self.b.grad = self.grad * self.a.value
         elif self.op == Operation.S_DIV:
-            self.a.grad = d_du / self.b.value
-            self.b.grad = -d_du * self.a.value / (self.b.value * self.b.value)
+            self.a.grad = self.grad / self.b.value
+            self.b.grad = -self.grad * self.a.value / (self.b.value * self.b.value)
         elif self.op == Operation.S_SQR:
-            self.a.grad = 2 * d_du * self.a.value
+            self.a.grad = 2 * self.grad * self.a.value
         elif self.op == Operation.M_ADD:
-            self.a.grad = d_du * np.ones_like(self.a.value)
-            self.b.grad = d_du * np.ones_like(self.a.value)
+            self.a.grad = self.grad * np.ones_like(self.a.value)
+            self.b.grad = self.grad * np.ones_like(self.a.value)
         elif self.op == Operation.M_SUB:
-            self.a.grad = d_du * np.ones_like(self.a.value)
-            self.b.grad = - d_du * np.ones_like(self.a.value)
+            self.a.grad = self.grad * np.ones_like(self.a.value)
+            self.b.grad = - self.grad * np.ones_like(self.a.value)
         elif self.op == Operation.M_ELM:
-            self.a.grad = d_du * self.b.value
-            self.b.grad = d_du * self.a.value
+            self.a.grad = self.grad * self.b.value
+            self.b.grad = self.grad * self.a.value
         elif self.op == Operation.M_ELD:
-            self.a.grad = d_du / self.b.value
-            self.b.grad = -d_du * self.a.value / (self.b.value * self.b.value)
+            self.a.grad = self.grad / self.b.value
+            self.b.grad = -self.grad * self.a.value / (self.b.value * self.b.value)
         elif self.op == Operation.M_ESQ:
-            self.a.grad = 2 * d_du * self.a.value
+            self.a.grad = 2 * self.grad * self.a.value
         elif self.op == Operation.M_MUL:
-            diag_d_du = np.diag(d_du)
-            self.a.grad = np.matmul(diag_d_du, np.tile(self.b.value, (self.a.value.shape[0], 1)))
-            self.b.grad = np.matmul(self.a.value.T, d_du)
+            diag_d_du = np.diag(self.grad)
+            # print(self.grad)
+            # print(diag_d_du, np.tile(self.b.value, (self.a.value.shape[0], 1)))
+            # self.a.grad = np.matmul(diag_d_du, np.tile(self.b.value, (self.a.value.shape[0], 1)))
+            self.a.grad = np.matmul(np.tile(self.b.value, (self.a.value.shape[0], 1)), diag_d_du)
+            self.b.grad = np.matmul(self.a.value.T, self.grad)
         elif self.op == Operation.M_RDS:
-            self.a.grad = d_du * np.ones_like(self.a.value)
+            # print(self.a)
+            self.a.grad = self.grad * np.ones_like(self.a.value)
         elif self.op == Operation.M_TNP:
-            self.a.grad = d_du.T
+            self.a.grad = self.grad.T
         else:
             print("something has gone horribly wrong")
 
@@ -269,12 +274,18 @@ def MSE(y: Variable, y_: Variable):
     return reduce_sum(square(y - y_))
 
 
-def backprop(loss):
-    pass
-
-
-def apply_gradients(loss, grads):
-    pass
+def backprop(loss, learning_rate):
+    queue = [loss]
+    loss.grad = 1.
+    while queue:
+        cur = queue.pop()
+        if cur.trainable:
+            cur.value -= learning_rate * cur.grad
+        cur.differentiate()
+        if cur.a is not None:
+            queue.append(cur.a)
+        if cur.b is not None:
+            queue.append(cur.b)
 
 
 def training_loop():
@@ -286,18 +297,27 @@ def training_loop():
 
     epochs = 10
 
+    loss_history = np.empty(epochs * 100)
+    pred_history = np.empty(epochs * 100)
+    c = 0
+
     for epoch in range(epochs):
         for example, output in zip(X, Y):
-            out = matmul(W, transpose(Variable(value=example, trainable=False))) + b
-            loss = MSE(out, Variable(value=output, trainable=False))
-            print(loss.eval())
-            preds = out.value
-            grads = backprop(loss)
-            apply_gradients(loss, grads)
+            out = matmul(W, transpose(Variable(value=example[np.newaxis], trainable=False))) + b
+            loss = MSE(out, Variable(value=output[np.newaxis], trainable=False))
+            loss_history[c] = loss.eval()
+            pred_history[c] = out.value[0][0]
+            c += 1
+            backprop(loss, 0.01)
+
+    plt.plot(np.arange(loss_history.shape[0]), loss_history)#title='loss history')
+    plt.figure()
+    plt.plot(np.arange(loss_history.shape[0]), pred_history)# title='prediction history (ground truth=0')
+    plt.show()
 
 
 def main():
-    pass
+    training_loop()
 
 
 if __name__ == "__main__":
