@@ -23,8 +23,10 @@ class Operation(IntEnum):
 
 S_OPS = {Operation.S_ADD, Operation.S_SUB, Operation.S_MUL, Operation.S_DIV}
 M_ELE = {Operation.M_ADD, Operation.M_SUB, Operation.M_ELM, Operation.M_ELD}
-names = ['add', 'subtract', 'multiply', 'divide', 'add', 'subtract', 'multiply', 'multiply', 'divide', 'square root']
+names = ['add', 'sub', 'mul', 'div', 'matadd', 'matsub', 'matmul', 'matelemul', 'matelediv', 'sqr', 'matlelesqr', 'reduce', 'transpose']
 specific_names = ['Scalar Addition', 'Scalar Subtraction', 'Scalar Multiplication', 'Scalar Division', 'Matrix Addition', 'Matrix Subtraction', 'Matrix Multiplication', 'Matrix Element-wise Multiplication', 'Matrix Division', 'Scalar Square', 'Matrix Element-wise Square', 'Matrix Reduce Sum']
+
+counts = {name: 0 for name in names}
 
 names_to_ops = {'add': [Operation.S_ADD, Operation.M_ADD],
                 'subtract': [Operation.S_SUB, Operation.M_SUB],
@@ -33,16 +35,12 @@ names_to_ops = {'add': [Operation.S_ADD, Operation.M_ADD],
                 'square': [Operation.S_SQR, Operation.M_ESQ]
 }
 
+used_names = set()
+
 
 class Variable:
-    def __init__(self, operation: Operation = None, value=None, name=None, a=None, b=None, trainable=True):
+    def __init__(self, operation: Operation = None, value=None, a=None, b=None, trainable=True):
         self.trainable = trainable
-        if name:
-            self.name = name
-        else:
-            global global_variable_counter
-            self.name = f"Variable {global_variable_counter}"
-            global_variable_counter += 1
 
         if value is not None:
             if type(value) == np.ndarray:
@@ -63,12 +61,16 @@ class Variable:
             self.op = None
             self.a = None
             self.b = None
-
+            global global_variable_counter
+            self.name = f"Variable {global_variable_counter}"
+            global_variable_counter += 1
             return
         else:
             self.value = value
 
         self.op = operation
+        self.name = f"{names[int(self.op)]} {counts[names[int(self.op)]]}"
+        counts[names[int(self.op)]] += 1
 
         if self.op in S_OPS:
             if not (a.is_scalar() and b.is_scalar()):
@@ -227,13 +229,13 @@ class Variable:
         if self.is_scalar():
             if not other.is_scalar():
                 raise ValueError(f"Cannot {names[int(op)]} matrix to scalar")
-            return Variable(names_to_ops[op][0], a=self, b=other, trainable=False, name=specific_names[int(names_to_ops[op][0])])
+            return Variable(names_to_ops[op][0], a=self, b=other, trainable=False)
         else:
             if other.is_scalar():
                 raise ValueError(f"Cannot {names[int(op)]} scalar to matrix")
             if not self.shape == other.shape:
                 raise ValueError(f"Cannot {names[int(op)]} matrices of different shapes")
-            return Variable(names_to_ops[op][1], a=self, b=other, trainable=False, name=specific_names[int(names_to_ops[op][1])])
+            return Variable(names_to_ops[op][1], a=self, b=other, trainable=False)
 
     def __add__(self, other):
         return self.s_or_ele_ops(other, 'add')
@@ -248,21 +250,21 @@ class Variable:
         return self.s_or_ele_ops(other, 'divide')
 
     def __matmul__(self, other):
-        return Variable(Operation.M_MUL, a=self, b=other, trainable=False, name='matmul')
+        return Variable(Operation.M_MUL, a=self, b=other, trainable=False)
 
 
 def square(x: Variable):
     if x.is_scalar():
-        return Variable(Operation.S_SQR, a=x, trainable=False, name='square')
+        return Variable(Operation.S_SQR, a=x, trainable=False)
     else:
-        return Variable(Operation.M_ESQ, a=x, trainable=False, name='square')
+        return Variable(Operation.M_ESQ, a=x, trainable=False)
 
 
 def reduce_sum(x: Variable):
     if x.is_scalar():
         return x
     else:
-        return Variable(Operation.M_RDS, a=x, trainable=False, name='reduce sum')
+        return Variable(Operation.M_RDS, a=x, trainable=False)
 
 
 def matmul(x1: Variable, x2: Variable):
@@ -270,7 +272,7 @@ def matmul(x1: Variable, x2: Variable):
 
 
 def transpose(x: Variable):
-    return Variable(Operation.M_TNP, a=x, trainable=False, name='transpose')
+    return Variable(Operation.M_TNP, a=x, trainable=False)
 
 
 def MSE(y: Variable, y_: Variable):
@@ -280,24 +282,35 @@ def MSE(y: Variable, y_: Variable):
     return reduce_sum(square(y - y_))
 
 
+def backprop(loss):
+    pass
+
+
+def apply_gradients(loss, grads):
+    pass
+
+
 def training_loop():
     X = np.ones((100, 5), dtype=np.float32)
-    Y = np.zeros((100), dtype=np.float32)
+    Y = np.zeros((100, 1), dtype=np.float32)
+
+    W = Variable(value=np.random.rand(Y.shape[1], X.shape[1]))
+    b = Variable(value=np.random.rand(1, 1))
+
+    epochs = 10
+
+    for epoch in range(epochs):
+        for example, output in zip(X, Y):
+            out = matmul(W, transpose(Variable(value=example))) + b
+            loss = MSE(out, Variable(value=output))
+            print(loss.eval())
+            preds = out.value
+            grads = backprop(loss)
+            apply_gradients(loss, grads)
 
 
 def main():
-    y = Variable(value=np.array([[1, 2, 3, 4]], dtype=np.float32), name='y')
-    y_ = Variable(value=np.array([[1.1, 2.2, 3.3, 4.4]], dtype=np.float32), name='y_')
-
-    x1 = Variable(value=np.array([[2., 2.], [1., 1.]], dtype=np.float32), name='x1')
-    x2 = Variable(value=np.array([[1., 1., 1., 1.], [1.1, 1.1, 1.1, 1.1]], dtype=np.float32), name='x2')
-
-    x3 = matmul(x1, x2)
-
-    x4 = matmul(x3, transpose(y - y_))
-    print(x4.eval())
-    print_tree(x4, val='trainable')
-    print(np.matmul(np.matmul(x1.value, x2.value), (y.value - y_.value).T))
+    pass
 
 
 if __name__ == "__main__":
