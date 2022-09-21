@@ -168,60 +168,47 @@ class Variable:
             print("something has gone horribly wrong")
         return self.value
 
-    def differentiate(self, a_or_b, d_du):
-        if not (a_or_b == 0 or a_or_b == 1):
-            raise ValueError("a_or_b must be either 0 or 1")
+    def differentiate(self, d_du):
         if self.op is None:
             return None
         elif self.op == Operation.S_ADD:
-            return d_du * np.float32(1.)
+            self.a.grad = d_du * np.float32(1.)
+            self.b.grad = d_du * np.float32(1.)
         elif self.op == Operation.S_SUB:
-            return d_du * np.float32(-1.)
+            self.a.grad = d_du * np.float32(1.)
+            self.b.grad = d_du * np.float32(-1.)
         elif self.op == Operation.S_MUL:
-            if a_or_b == 0:
-                return d_du * self.b.value
-            else:
-                return d_du * self.a.value
+            self.a.grad = d_du * self.b.value
+            self.b.grad = d_du * self.a.value
         elif self.op == Operation.S_DIV:
-            if a_or_b == 0:
-                return d_du / self.b.value
-            else:
-                return -d_du * self.a.value / (self.b.value * self.b.value)
+            self.a.grad = d_du / self.b.value
+            self.b.grad = -d_du * self.a.value / (self.b.value * self.b.value)
         elif self.op == Operation.S_SQR:
-            if a_or_b == 1:
-                raise ValueError("b is not a valid option for square operation")
-            return 2 * d_du * self.a.value
+            self.a.grad = 2 * d_du * self.a.value
         elif self.op == Operation.M_ADD:
-            return d_du * np.ones_like(self.a.value)
+            self.a.grad = d_du * np.ones_like(self.a.value)
+            self.b.grad = d_du * np.ones_like(self.a.value)
         elif self.op == Operation.M_SUB:
-            return d_du * np.ones_like(self.a.value)
+            self.a.grad = d_du * np.ones_like(self.a.value)
+            self.b.grad = - d_du * np.ones_like(self.a.value)
         elif self.op == Operation.M_ELM:
-            if a_or_b == 0:
-                return d_du * self.b.value
-            else:
-                return d_du * self.a.value
+            self.a.grad = d_du * self.b.value
+            self.b.grad = d_du * self.a.value
         elif self.op == Operation.M_ELD:
-            if a_or_b == 0:
-                return d_du / self.b.value
-            else:
-                return -d_du * self.a.value / (self.b.value * self.b.value)
+            self.a.grad = d_du / self.b.value
+            self.b.grad = -d_du * self.a.value / (self.b.value * self.b.value)
         elif self.op == Operation.M_ESQ:
-            if a_or_b == 1:
-                raise ValueError("b is not a valid option for matrix element-wise square operation")
-            return 2 * d_du * self.a.value
+            self.a.grad = 2 * d_du * self.a.value
         elif self.op == Operation.M_MUL:
-            if a_or_b == 0:
-                diag_d_du = np.diag(d_du)
-                return np.matmul(diag_d_du, np.tile(self.b.value, (self.a.value.shape[0], 1)))
-            else:
-                return np.dot(d_du, self.a.value.T[0])
+            diag_d_du = np.diag(d_du)
+            self.a.grad = np.matmul(diag_d_du, np.tile(self.b.value, (self.a.value.shape[0], 1)))
+            self.b.grad = np.matmul(self.a.value.T, d_du)
         elif self.op == Operation.M_RDS:
-            return d_du * np.ones_like(self.a.value)
+            self.a.grad = d_du * np.ones_like(self.a.value)
         elif self.op == Operation.M_TNP:
-            return d_du.T
+            self.a.grad = d_du.T
         else:
             print("something has gone horribly wrong")
-
 
     def s_or_ele_ops(self, other, op):
         if not type(other) == Variable:
@@ -301,8 +288,8 @@ def training_loop():
 
     for epoch in range(epochs):
         for example, output in zip(X, Y):
-            out = matmul(W, transpose(Variable(value=example))) + b
-            loss = MSE(out, Variable(value=output))
+            out = matmul(W, transpose(Variable(value=example, trainable=False))) + b
+            loss = MSE(out, Variable(value=output, trainable=False))
             print(loss.eval())
             preds = out.value
             grads = backprop(loss)
