@@ -1,7 +1,6 @@
 import numpy as np
 from enum import IntEnum
 import matplotlib.pyplot as plt
-from utils import print_tree
 
 global_variable_counter = 0
 
